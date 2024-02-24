@@ -33,36 +33,14 @@ typedef struct ak8963 {
 	float                       mag_soft_iron_bias_x;       /*!< Magnetometer soft iron bias of x axis */
 	float                       mag_soft_iron_bias_y;       /*!< Magnetometer soft iron bias of y axis */
 	float                       mag_soft_iron_bias_z;       /*!< Magnetometer soft iron bias of z axis */
-	ak8963_func_i2c_recv        i2c_recv;          			/*!< AK8963 read bytes */
 	ak8963_func_i2c_send        i2c_send;         			/*!< AK8963 write bytes */
+	ak8963_func_i2c_recv        i2c_recv;          			/*!< AK8963 read bytes */
 	ak8963_func_delay          	delay;                 		/*!< Delay function */
 	float 						mag_scaling_factor;			/*!< Magnetometer scaling factor */
 	float  						mag_sens_adj_x; 			/*!< Magnetometer sensitive adjust of x axis */
 	float  						mag_sens_adj_y;				/*!< Magnetometer sensitive adjust of y axis */
 	float  						mag_sens_adj_z;				/*!< Magnetometer sensitive adjust of z axis */
 } ak8963_t;
-
-static err_code_t ak8963_i2c_write_reg(ak8963_handle_t handle, uint8_t reg_addr, uint8_t *buf, uint16_t len)
-{
-	uint8_t buf_send[len + 1];
-
-	buf_send[0] = reg_addr;
-	memcpy(&buf_send[1], buf, len);
-	handle->i2c_send(buf_send, len + 1);
-
-	return ERR_CODE_SUCCESS;
-}
-
-static err_code_t ak8963_i2c_read_reg(ak8963_handle_t handle, uint8_t reg_addr, uint8_t *buf, uint16_t len)
-{
-	uint8_t buffer[1];
-
-	buffer[0] = reg_addr | 0x80;
-	handle->i2c_send(buffer, 1);
-	handle->i2c_recv(buf, len);
-
-	return ERR_CODE_SUCCESS;
-}
 
 ak8963_handle_t ak8963_init(void)
 {
@@ -107,8 +85,8 @@ err_code_t ak8963_set_config(ak8963_handle_t handle, ak8963_cfg_t config)
 	handle->mag_soft_iron_bias_x = config.mag_soft_iron_bias_x;
 	handle->mag_soft_iron_bias_y = config.mag_soft_iron_bias_y;
 	handle->mag_soft_iron_bias_z = config.mag_soft_iron_bias_z;
-	handle->i2c_recv = config.i2c_recv;
 	handle->i2c_send = config.i2c_send;
+	handle->i2c_recv = config.i2c_recv;
 	handle->delay = config.delay;
 	handle->mag_scaling_factor = mag_scaling_factor;
 	handle->mag_sens_adj_x = 0;
@@ -129,21 +107,21 @@ err_code_t ak8963_config(ak8963_handle_t handle)
 	/* Power down AK8963 magnetic sensor */
 	uint8_t buffer = 0;
 	buffer = 0x00;
-	ak8963_i2c_write_reg(handle, AK8963_CNTL, &buffer, 1);
+	handle->i2c_send(AK8963_CNTL, &buffer, 1);
 
 	/* Delay 10ms here if necessary */
 	handle->delay(10);
 
 	/* Set fuse ROM access mode */
 	buffer = 0x0F;
-	ak8963_i2c_write_reg(handle, AK8963_CNTL, &buffer, 1);
+	handle->i2c_send(AK8963_CNTL, &buffer, 1);
 
 	/* Delay 10ms here if necessary */
 	handle->delay(10);
 
 	/* Power down AK8963 magnetic sensor */
 	buffer = 0x00;
-	ak8963_i2c_write_reg(handle, AK8963_CNTL, &buffer, 1);
+	handle->i2c_send(AK8963_CNTL, &buffer, 1);
 
 	/* Delay 10ms here if necessary */
 	handle->delay(10);
@@ -152,11 +130,11 @@ err_code_t ak8963_config(ak8963_handle_t handle)
 	buffer = 0;
 	buffer = handle->opr_mode & 0x0F;
 	buffer |= (handle->mfs_sel << 4) & 0x10;
-	ak8963_i2c_write_reg(handle, AK8963_CNTL, &buffer, 1);
+	handle->i2c_send(AK8963_CNTL, &buffer, 1);
 
 	/* Read magnetic sensitivity adjustment */
 	uint8_t mag_raw_data[3];
-	ak8963_i2c_read_reg(handle, AK8963_ASAX, mag_raw_data, 3);
+	handle->i2c_recv(AK8963_ASAX, mag_raw_data, 3);
 
 	/* Update magnetometer sensitive adjust */
 	handle->mag_sens_adj_x = (float)(mag_raw_data[0] - 128) / 256.0f + 1.0f;
@@ -175,7 +153,7 @@ err_code_t ak8963_get_mag_raw(ak8963_handle_t handle, int16_t *raw_x, int16_t *r
 	}
 
 	uint8_t mag_raw_data[7];
-	ak8963_i2c_read_reg(handle, AK8963_XOUT_L, mag_raw_data, 7);
+	handle->i2c_recv(AK8963_XOUT_L, mag_raw_data, 7);
 
 	if ((mag_raw_data[6] & 0x08)) {
 		return ERR_CODE_FAIL;
@@ -199,7 +177,7 @@ err_code_t ak8963_get_mag_calib(ak8963_handle_t handle, float *calib_x, float *c
 	uint8_t mag_raw_data[7];
 	int16_t raw_x = 0, raw_y = 0, raw_z = 0;
 
-	ak8963_i2c_read_reg(handle, AK8963_XOUT_L, mag_raw_data, 7);
+	handle->i2c_recv(AK8963_XOUT_L, mag_raw_data, 7);
 
 	if ((mag_raw_data[6] & 0x08)) {
 		return ERR_CODE_FAIL;
@@ -227,7 +205,7 @@ err_code_t ak8963_get_mag_scale(ak8963_handle_t handle, float *scale_x, float *s
 	uint8_t mag_raw_data[7];
 	int16_t raw_x = 0, raw_y = 0, raw_z = 0;
 
-	ak8963_i2c_read_reg(handle, AK8963_XOUT_L, mag_raw_data, 7);
+	handle->i2c_recv(AK8963_XOUT_L, mag_raw_data, 7);
 
 	if ((mag_raw_data[6] & 0x08)) {
 		return ERR_CODE_FAIL;
